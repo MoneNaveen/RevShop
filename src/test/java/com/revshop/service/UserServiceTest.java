@@ -23,8 +23,6 @@ class UserServiceTest {
     @InjectMocks
     private UserService userService;
 
-
-
     // ================= REGISTER BUYER =================
 
     @Test
