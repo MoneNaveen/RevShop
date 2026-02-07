@@ -1,7 +1,6 @@
 # 🏛️ 2. APPLICATION ARCHITECTURE DIAGRAM
-___
+
 ## 🧩 Layered Architecture – RevShop
-___
 ```text
 
 ┌──────────────────────────────────────────────────────────────────────┐
