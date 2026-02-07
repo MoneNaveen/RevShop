@@ -48,8 +48,6 @@ build/
 !**/src/test/**/build/
 
 
-logs/
-*.log
 
 # =========================
 # VS Code
