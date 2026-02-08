@@ -1,6 +1,8 @@
 package com.revshop.dao;
 
 import com.revshop.model.Order;
+import com.revshop.model.OrderStatus;
+import com.revshop.model.PaymentMode;
 import com.revshop.util.DBConnectionUtil;
 
 import java.sql.*;
@@ -10,18 +12,21 @@ import java.util.List;
 public class OrderDaoImpl implements OrderDao {
 
     private static final String INSERT_ORDER =
-            "INSERT INTO orders (buyer_id, buyer_email, total_amount, status) VALUES (?, ?, ?, ?)";
+            "INSERT INTO orders (buyer_id, buyer_email, total_amount, status, payment_mode) VALUES (?, ?, ?, ?, ?)";
 
     private static final String BY_BUYER =
             "SELECT * FROM orders WHERE buyer_id = ? ORDER BY created_at DESC";
 
     private static final String BY_SELLER = """
-        SELECT DISTINCT o.order_id, o.buyer_email, o.total_amount
+        SELECT DISTINCT o.order_id, o.buyer_email, o.total_amount, o.status
         FROM orders o
         JOIN order_items oi ON o.order_id = oi.order_id
         JOIN products p ON oi.product_id = p.product_id
         WHERE p.seller_id = ?
     """;
+
+    private static final String UPDATE_STATUS =
+            "UPDATE orders SET status = ? WHERE order_id = ?";
 
     // ================= SAVE ORDER =================
     @Override
@@ -34,13 +39,14 @@ public class OrderDaoImpl implements OrderDao {
             ps.setInt(1, order.getBuyerId());
             ps.setString(2, order.getBuyerEmail());
             ps.setDouble(3, order.getTotalAmount());
-            ps.setString(4, "PLACED");
+            ps.setString(4, order.getStatus().name());
+            ps.setString(5, order.getPaymentMode().name());
 
             ps.executeUpdate();
 
             ResultSet rs = ps.getGeneratedKeys();
             if (rs.next()) {
-                return rs.getInt(1); // order_id
+                return rs.getInt(1);
             }
 
         } catch (Exception e) {
@@ -63,11 +69,17 @@ public class OrderDaoImpl implements OrderDao {
             ResultSet rs = ps.executeQuery();
 
             while (rs.next()) {
-                orders.add(new Order(
+                Order order = new Order(
                         rs.getInt("buyer_id"),
                         rs.getString("buyer_email"),
                         rs.getDouble("total_amount")
-                ));
+                );
+                order.setOrderId(rs.getInt("order_id"));
+                order.setStatus(OrderStatus.valueOf(rs.getString("status")));
+                order.setPaymentMode(PaymentMode.valueOf(rs.getString("payment_mode")));
+                order.setOrderDate(rs.getTimestamp("created_at").toLocalDateTime());
+
+                orders.add(order);
             }
 
         } catch (Exception e) {
@@ -90,10 +102,13 @@ public class OrderDaoImpl implements OrderDao {
             ResultSet rs = ps.executeQuery();
 
             while (rs.next()) {
-                orders.add(new Order(
+                Order order = new Order(
                         rs.getString("buyer_email"),
                         rs.getDouble("total_amount")
-                ));
+                );
+                order.setOrderId(rs.getInt("order_id"));
+                order.setStatus(OrderStatus.valueOf(rs.getString("status")));
+                orders.add(order);
             }
 
         } catch (Exception e) {
@@ -101,5 +116,21 @@ public class OrderDaoImpl implements OrderDao {
         }
 
         return orders;
+    }
+
+    // ================= SELLER: UPDATE STATUS =================
+    @Override
+    public void updateOrderStatus(int orderId, OrderStatus status) {
+
+        try (Connection con = DBConnectionUtil.getConnection();
+             PreparedStatement ps = con.prepareStatement(UPDATE_STATUS)) {
+
+            ps.setString(1, status.name());
+            ps.setInt(2, orderId);
+            ps.executeUpdate();
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to update order status", e);
+        }
     }
 }

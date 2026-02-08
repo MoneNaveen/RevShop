@@ -9,15 +9,28 @@ import java.util.List;
 public class ReviewService {
 
     private final ReviewDao reviewDao = new ReviewDaoImpl();
+    private final OrderService orderService = new OrderService();
 
-    public void addReview(int productId, int buyerId, int rating, String comment) {
+    public void addReview(int productId,
+                          int buyerId,
+                          int rating,
+                          String comment) {
 
         if (rating < 1 || rating > 5) {
             System.out.println("❌ Rating must be between 1 and 5");
             return;
         }
 
-        reviewDao.addReview(new Review(productId, buyerId, rating, comment));
+        // 🔒 Allow review only if purchased
+        if (!orderService.hasPurchased(buyerId, productId)) {
+            System.out.println("❌ You can review only purchased products");
+            return;
+        }
+
+        reviewDao.addReview(
+                new Review(productId, buyerId, rating, comment)
+        );
+
         System.out.println("⭐ Review added successfully");
     }
 
@@ -43,5 +56,4 @@ public class ReviewService {
     public double getAverageRating(int productId) {
         return reviewDao.getAverageRating(productId);
     }
-
 }

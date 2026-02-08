@@ -3,6 +3,7 @@ package com.revshop.service;
 import com.revshop.dao.ProductDao;
 import com.revshop.dao.ProductDaoImpl;
 import com.revshop.model.Product;
+import com.revshop.notification.NotificationService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -14,15 +15,20 @@ public class ProductService {
             LogManager.getLogger(ProductService.class);
 
     private final ProductDao productDao;
+    private final NotificationService notificationService;
+
+    // ================= CONSTRUCTORS =================
 
     // Production constructor
     public ProductService() {
         this.productDao = new ProductDaoImpl();
+        this.notificationService = new NotificationService();
     }
 
     // Constructor for testing / mocking
     public ProductService(ProductDao productDao) {
         this.productDao = productDao;
+        this.notificationService = new NotificationService();
     }
 
     // ================= SELLER OPERATIONS =================
@@ -74,6 +80,21 @@ public class ProductService {
         return productDao.getProductsBySeller(sellerId);
     }
 
+    // 🔔 LOW STOCK CHECK + NOTIFICATION
+    public void checkLowStockAndNotify(int productId) {
+
+        Product p = productDao.findById(productId);
+
+        if (p != null && p.getStockQuantity() <= 5) {
+
+            notificationService.notifyLowStock(
+                    p.getSellerId(),
+                    p.getProductId(),
+                    p.getStockQuantity()
+            );
+        }
+    }
+
     // ================= BUYER OPERATIONS =================
 
     public List<Product> browseAllProducts() {
@@ -87,11 +108,14 @@ public class ProductService {
     }
 
     public void reduceStock(int productId, int quantity) {
+
         boolean success = productDao.reduceStock(productId, quantity);
 
         if (!success) {
-            throw new RuntimeException("❌ Insufficient stock for product ID " + productId);
+            logger.error("Insufficient stock for productId={}", productId);
+            throw new RuntimeException(
+                    "❌ Insufficient stock for product ID " + productId
+            );
         }
     }
-
 }

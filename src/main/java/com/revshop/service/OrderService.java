@@ -3,9 +3,12 @@ package com.revshop.service;
 import com.revshop.dao.*;
 import com.revshop.model.CartItem;
 import com.revshop.model.Order;
+import com.revshop.model.OrderStatus;
+import com.revshop.model.PaymentMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public class OrderService {
@@ -17,7 +20,8 @@ public class OrderService {
     private final OrderItemDao orderItemDao = new OrderItemDaoImpl();
     private final ProductService productService = new ProductService();
 
-    // BUYER: place order
+    // ================= BUYER =================
+
     public void placeOrder(int buyerId,
                            String buyerEmail,
                            List<CartItem> items,
@@ -25,7 +29,11 @@ public class OrderService {
 
         Order order = new Order(buyerId, buyerEmail, totalAmount);
 
-        int orderId = orderDao.saveOrder(order); // ✅ FIXED
+        order.setOrderDate(LocalDateTime.now());
+        order.setStatus(OrderStatus.PLACED);
+        order.setPaymentMode(PaymentMode.COD);
+
+        int orderId = orderDao.saveOrder(order);
 
         orderItemDao.saveOrderItems(orderId, items);
 
@@ -34,27 +42,12 @@ public class OrderService {
                     item.getProductId(),
                     item.getQuantity()
             );
+
+            // 🔔 low stock notification
+            productService.checkLowStockAndNotify(item.getProductId());
         }
 
         logger.info("Order placed successfully for {}", buyerEmail);
-    }
-
-    // SELLER: view orders
-    public void viewOrdersBySeller(int sellerId) {
-        var orders = orderDao.getOrdersBySeller(sellerId);
-
-        if (orders.isEmpty()) {
-            System.out.println("📭 No orders found");
-            return;
-        }
-
-        System.out.println("\n--- ORDERS ---");
-        for (Order o : orders) {
-            System.out.println(
-                    "Buyer: " + o.getBuyerEmail() +
-                            " | Total: ₹" + o.getTotalAmount()
-            );
-        }
     }
 
     public void viewOrdersByBuyer(int buyerId) {
@@ -67,9 +60,51 @@ public class OrderService {
         }
 
         System.out.println("\n--- YOUR ORDERS ---");
+        System.out.println("OrderID | Date | Total | Payment | Status");
+
         for (Order o : orders) {
-            System.out.println("Total: ₹" + o.getTotalAmount());
+            System.out.printf(
+                    "%d | %s | ₹%.2f | %s | %s%n",
+                    o.getOrderId(),
+                    o.getOrderDate(),
+                    o.getTotalAmount(),
+                    o.getPaymentMode(),
+                    o.getStatus()
+            );
         }
     }
 
+    // ================= SELLER =================
+
+    public void viewOrdersBySeller(int sellerId) {
+
+        List<Order> orders = orderDao.getOrdersBySeller(sellerId);
+
+        if (orders.isEmpty()) {
+            System.out.println("📭 No orders found");
+            return;
+        }
+
+        System.out.println("\n--- ORDERS ---");
+        for (Order o : orders) {
+            System.out.println(
+                    "OrderID: " + o.getOrderId() +
+                            " | Buyer: " + o.getBuyerEmail() +
+                            " | Total: ₹" + o.getTotalAmount() +
+                            " | Status: " + o.getStatus()
+            );
+        }
+    }
+
+    public void updateOrderStatus(int orderId, OrderStatus status) {
+        orderDao.updateOrderStatus(orderId, status);
+        logger.info("Order {} status updated to {}", orderId, status);
+    }
+
+    // ================= COMMON =================
+
+    // Used by ReviewService
+    public boolean hasPurchased(int buyerId, int productId) {
+        return orderItemDao.existsByBuyerAndProduct(buyerId, productId);
+    }
 }
