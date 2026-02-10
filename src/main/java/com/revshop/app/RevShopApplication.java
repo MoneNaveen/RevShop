@@ -6,7 +6,7 @@ import com.revshop.model.OrderStatus;
 import com.revshop.notification.NotificationService;
 import com.revshop.service.*;
 import com.revshop.util.ConsoleColors;
-
+import java.io.Console;
 import java.util.List;
 import java.util.Scanner;
 
@@ -15,6 +15,7 @@ public class RevShopApplication {
     private static final Scanner sc = new Scanner(System.in);
     private static final UserService userService = new UserService();
     private static final ReviewService reviewService = new ReviewService();
+    private static String lastPaymentMethod = null;
 
     public static void main(String[] args) {
 
@@ -54,8 +55,17 @@ public class RevShopApplication {
 
         System.out.print("Email: ");
         String email = sc.nextLine();
-        System.out.print("Password: ");
-        String pass = sc.nextLine();
+        Console console = System.console();
+        String pass;
+
+        if (console != null) {
+            char[] passwordChars = console.readPassword("Password: ");
+            pass = new String(passwordChars);
+        }  else {
+            System.out.print("Password: ");
+            pass = readPasswordFallback();
+        }
+
 
         User user = userService.loginUser(email, pass);
 
@@ -82,8 +92,17 @@ public class RevShopApplication {
         System.out.print("Email: ");
         String email = sc.nextLine();
 
-        System.out.print("Password: ");
-        String pass = sc.nextLine();
+        Console console = System.console();
+        String pass;
+
+        if (console != null) {
+            char[] passwordChars = console.readPassword("Password: ");
+            pass = new String(passwordChars);
+        }  else {
+            System.out.print("Password: ");
+            pass = readPasswordFallback(); // ⭐ masked
+        }
+
 
         System.out.println(ConsoleColors.CYAN + "\nChoose Security Question:" + ConsoleColors.RESET);
         System.out.println("1. What is your pet name?");
@@ -158,7 +177,8 @@ public class RevShopApplication {
             System.out.println("7. Add to Favorites");
             System.out.println("8. View Favorites");
             System.out.println("9. View My Orders");
-            System.out.println("10. Logout");
+            System.out.println("10. View Notifications");
+            System.out.println("11. Logout");
             System.out.print(ConsoleColors.YELLOW + "Choose: " + ConsoleColors.RESET);
 
             int choice = sc.nextInt();
@@ -180,15 +200,82 @@ public class RevShopApplication {
                     System.out.println(ConsoleColors.GREEN + "✅ Added to cart" + ConsoleColors.RESET);
                 }
                 case 4 -> {
-                    double total = cartService.getTotal();
-                    System.out.println(ConsoleColors.CYAN + "🛒 Total = ₹" + total + ConsoleColors.RESET);
-                    System.out.print("Payment (UPI / CARD / COD): ");
-                    paymentService.makePayment(total, sc.nextLine());
-                    orderService.placeOrder(buyerId, email, cartService.getItems(), total);
-                    notificationService.notifyOrderPlaced(email);
-                    cartService.clearCart();
-                    System.out.println(ConsoleColors.GREEN + "✅ Order completed" + ConsoleColors.RESET);
+                    try {
+                        double total = cartService.getTotal();
+                        System.out.println(
+                                ConsoleColors.CYAN + "🛒 Total = ₹" + total + ConsoleColors.RESET
+                        );
+
+                        System.out.print("Payment (UPI / CARD / COD): ");
+                        String method = sc.nextLine().trim().toUpperCase();
+
+                        // ---------- PAYMENT DETAILS ----------
+                        switch (method) {
+
+                            case "UPI" -> {
+                                System.out.print("Enter UPI ID: ");
+                                String upiId = sc.nextLine();
+
+                                if (!upiId.matches("^[a-zA-Z0-9._-]{2,}@[a-zA-Z]{2,}$")) {
+                                    throw new RuntimeException("Invalid UPI ID format");
+                                }
+
+                                System.out.println("✔ UPI verified");
+                            }
+
+                            case "CARD" -> {
+                                System.out.print("Card Holder Name: ");
+                                String holderName = sc.nextLine();
+
+                                System.out.print("Card Number (16 digits): ");
+                                String cardNumber = sc.nextLine();
+
+                                String cvv = readMaskedInput("CVV: ");
+
+                                if (!cardNumber.matches("\\d{16}")) {
+                                    throw new RuntimeException("Invalid card number");
+                                }
+
+                                if (!cvv.matches("\\d{3}")) {
+                                    throw new RuntimeException("Invalid CVV");
+                                }
+
+                                System.out.println("✔ Card verified for " + holderName);
+                            }
+
+                            case "COD" -> {
+                                System.out.println("✔ Cash on Delivery selected");
+                            }
+
+                            default -> throw new RuntimeException(
+                                    "Unsupported payment method. Allowed: UPI / CARD / COD"
+                            );
+                        }
+                        // -------------------------------------
+
+                        paymentService.makePayment(total, method);
+
+                        orderService.placeOrder(
+                                buyerId,
+                                email,
+                                cartService.getItems(),
+                                total
+                        );
+
+                        notificationService.notifyOrderPlaced(buyerId, email);
+                        cartService.clearCart();
+
+                        System.out.println(
+                                ConsoleColors.GREEN + "✅ Order completed" + ConsoleColors.RESET
+                        );
+
+                    } catch (Exception e) {
+                        System.out.println(
+                                ConsoleColors.RED + "❌ " + e.getMessage() + ConsoleColors.RESET
+                        );
+                    }
                 }
+
                 case 5 -> {
                     System.out.print("Product ID: ");
                     int pid = sc.nextInt();
@@ -210,7 +297,8 @@ public class RevShopApplication {
                 }
                 case 8 -> displayProducts(favoriteService.viewFavorites(buyerId));
                 case 9 -> orderService.viewOrdersByBuyer(buyerId);
-                case 10 -> {
+                case 10 -> notificationService.viewBuyerNotifications(buyerId);
+                case 11 -> {
                     System.out.println(ConsoleColors.GREEN + "👋 Buyer logged out" + ConsoleColors.RESET);
                     return;
                 }
@@ -299,6 +387,77 @@ public class RevShopApplication {
         sc.nextLine();
 
         ps.addProduct(new Product(0, sellerId, name, desc, category, price, mrp, discount, stock));
+    }
+
+    private static String readPasswordFallback() {
+        StringBuilder password = new StringBuilder();
+
+        try {
+            while (true) {
+                int ch = System.in.read();
+
+                if (ch == '\n' || ch == '\r') {
+                    System.out.println();
+                    break;
+                }
+
+                if (ch == 127 || ch == 8) { // backspace
+                    if (password.length() > 0) {
+                        password.deleteCharAt(password.length() - 1);
+                        System.out.print("\b \b");
+                    }
+                } else {
+                    password.append((char) ch);
+                    System.out.print("*");
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return password.toString();
+    }
+
+    // ================= PAYMENT HELPERS =================
+
+    private static String readMaskedInput(String label) {
+        System.out.print(label);
+        StringBuilder input = new StringBuilder();
+
+        try {
+            while (true) {
+                int ch = System.in.read();
+                if (ch == '\n' || ch == '\r') {
+                    System.out.println();
+                    break;
+                }
+                if (ch == 127 || ch == 8) { // backspace
+                    if (input.length() > 0) {
+                        input.deleteCharAt(input.length() - 1);
+                        System.out.print("\b \b");
+                    }
+                } else {
+                    input.append((char) ch);
+                    System.out.print("*");
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return input.toString();
+    }
+
+    private static boolean isValidUpi(String upi) {
+        return upi.matches("^[a-zA-Z0-9._-]{2,}@[a-zA-Z]{2,}$");
+    }
+
+    private static boolean isValidCard(String card) {
+        return card.matches("\\d{16}");
+    }
+
+    private static boolean isValidCvv(String cvv) {
+        return cvv.matches("\\d{3}");
     }
 
     private static void displayProducts(List<Product> products) {

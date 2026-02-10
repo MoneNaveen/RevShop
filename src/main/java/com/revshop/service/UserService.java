@@ -6,6 +6,7 @@ import com.revshop.model.User;
 import com.revshop.util.PasswordUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import com.revshop.util.PasswordValidator;
 
 public class UserService {
 
@@ -30,6 +31,19 @@ public class UserService {
 
         if (userDao.findByEmail(email) != null) {
             System.out.println("⚠️ User already exists");
+            return;
+        }
+
+        if (!PasswordValidator.isStrong(password)) {
+            System.out.println("""
+❌ Weak password!
+
+Password must:
+• Be at least 8 characters
+• Contain uppercase & lowercase letters
+• Contain a digit
+• Contain a special character
+""");
             return;
         }
 

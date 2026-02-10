@@ -16,11 +16,21 @@ public class NotificationService {
     // ✅ In-memory notification store (console app style)
     private static final List<com.revshop.notification.Notification> notifications = new ArrayList<>();
 
-    // ================= BUYER =================
-    public void notifyOrderPlaced(String email) {
-        logger.info("Notification sent to {}: Order placed successfully", email);
-        System.out.println("🔔 Notification: Order placed successfully for " + email);
+    // ================= BUYER (STORED NOTIFICATION) =================
+    public void notifyOrderPlaced(int buyerId, String email) {
+
+        String message = "Order placed successfully";
+
+        logger.info("Notification sent to buyerId={}: {}", buyerId, message);
+
+        // ✅ store notification in existing in-memory list
+        notifications.add(
+                new com.revshop.notification.Notification(buyerId, message)
+        );
+
+        System.out.println("🔔 Notification: " + message + " for " + email);
     }
+
 
     // ================= SELLER =================
     public void notifySeller(int sellerId, String message) {
@@ -62,6 +72,30 @@ public class NotificationService {
             );
         }
     }
+
+    // ================= VIEW BUYER NOTIFICATIONS =================
+    public void viewBuyerNotifications(int buyerId) {
+
+        List<com.revshop.notification.Notification> buyerNotifications =
+                notifications.stream()
+                        .filter(n -> n.getSellerId() == buyerId)
+                        .collect(Collectors.toList());
+
+        System.out.println("\n--- 🔔 YOUR NOTIFICATIONS ---");
+
+        if (buyerNotifications.isEmpty()) {
+            System.out.println("📭 No notifications");
+            return;
+        }
+
+        for (com.revshop.notification.Notification n : buyerNotifications) {
+            System.out.println(
+                    "• " + n.getMessage() +
+                            " | " + n.getCreatedAt()
+            );
+        }
+    }
+
 
     // (optional – keep for compatibility)
     public void notifyUser(String message) {
